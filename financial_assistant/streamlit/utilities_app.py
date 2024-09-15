@@ -23,6 +23,9 @@ from utils.visual.env_utils import initialize_env_variables
 logger = get_logger()
 
 
+
+
+
 def _get_config_info(config_path: str = CONFIG_PATH) -> Dict[str, str]:
     """
     Loads json config file.
