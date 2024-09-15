@@ -138,15 +138,22 @@ def save_output_callback(
     elif isinstance(response, dict):
         for key, value in response.items():
             with open(filename, 'a') as text_file:
-                if isinstance(value, str):
+                if isinstance(value, (str, float, int)):
                     save_simple_output(value + '\n', filename)
                 elif isinstance(value, list):
                     save_simple_output(', '.join([str(item) for item in value]) + '.' + '\n', filename)
+                elif isinstance(value, (pandas.Series, pandas.DataFrame)):
+                    save_simple_output(value, filename)
+                else:
+                    save_simple_output(value, filename)
 
     # If the response is a tuple, split it up and write each element individually
     elif isinstance(response, tuple):
         for elem in response:
             save_simple_output(response + '\n', filename)
+
+    elif isinstance(response, (pandas.Series, pandas.DataFrame0)):
+        save_simple_output(response, filename)
 
     else:
         raise ValueError('Invalid response type')
@@ -169,22 +176,32 @@ def save_simple_output(
     """
     # If the response is a string or number, write it directly into the text file
     if isinstance(response, (str, float, int)):
+        if isinstance(response, float):
+            response = round(response, 2)
         with open(filename, 'a') as text_file:
             text_file.write(str(response))
 
     # If the response is a Series or DataFrame, convert it to a dictionary and then dump it to a JSON file
     elif isinstance(response, (pandas.Series, pandas.DataFrame)):
-        # Write the dataframe to a CSV file
-        response_dict = response.to_dict()
+        # Convert the response to json
+        json_string = response.to_json(orient='records')
 
-        # Convert the dictionary into a string
-        stripped_string = dump_stripped_json(response_dict)
-
-        # Write the stripped string to a txt file
+        # Write the json string to a txt file
         with open(filename, 'a') as text_file:
-            text_file.write(stripped_string)
+            text_file.write(json_string)
     else:
-        raise ValueError('Invalid response type')
+        try:
+            # Write the dataframe to a CSV file
+            response_dict = response.to_dict()
+
+            # Convert the dictionary into a string
+            stripped_string = dump_stripped_json(response_dict)
+
+            # Write the stripped string to a txt file
+            with open(filename, 'a') as text_file:
+                text_file.write(stripped_string)
+        except:
+            streamlit.warning('Could not save the response.')
 
     # Spaces between elements or closing space
     with open(filename, 'a') as text_file:
@@ -275,7 +292,7 @@ def clear_directory(directory: str, delete_subdirectories: bool = False) -> None
 
     try:
         if not os.path.exists(directory):
-            streamlit.error(f'Directory does not exist: {directory}')
+            logger.warning(f'Directory does not exist: {directory}')
             return
 
         for item in os.listdir(directory):
@@ -287,9 +304,9 @@ def clear_directory(directory: str, delete_subdirectories: bool = False) -> None
                     if delete_subdirectories:
                         shutil.rmtree(item_path)
             except Exception as e:
-                streamlit.error(f'Error deleting {item_path}: {e}')
+                logger.warning(f'Error deleting {item_path}: {e}')
     except Exception as e:
-        streamlit.error(f'Error processing directory {directory}: {e}')
+        logger.warning(f'Error processing directory {directory}: {e}')
 
 
 def clear_cache(delete: bool = False) -> None:
@@ -298,7 +315,7 @@ def clear_cache(delete: bool = False) -> None:
     cache_dir = streamlit.session_state.cache_dir
 
     if not os.path.exists(cache_dir):
-        streamlit.error(f'Cache directory does not exist: {cache_dir}')
+        logger.warning(f'Cache directory does not exist: {Path(cache_dir).name}')
         return
 
     # Clear the cache directory
@@ -307,9 +324,9 @@ def clear_cache(delete: bool = False) -> None:
     if delete:
         try:
             shutil.rmtree(cache_dir)
-            streamlit.success(f'Successfully deleted cache directory: {Path(cache_dir).name}')
+            logger.info(f'Successfully deleted cache directory: {Path(cache_dir).name}')
         except Exception as e:
-            streamlit.error(f'Error deleting cache directory {Path(cache_dir).name}: {e}')
+            logger.warning(f'Error deleting cache directory {Path(cache_dir).name}: {e}')
 
         for root, dirs, _ in os.walk(cache_dir, topdown=False):
             for dir in dirs:
@@ -318,7 +335,7 @@ def clear_cache(delete: bool = False) -> None:
                 try:
                     os.rmdir(path)
                 except Exception as e:
-                    streamlit.error(f'Error deleting directory {path}: {e}')
+                    logger.warning(f'Error deleting directory {path}: {e}')
 
 
 def download_file(filename: str) -> None:
@@ -342,9 +359,9 @@ def download_file(filename: str) -> None:
         with open(filename, 'rb') as f:
             data = f.read()
         streamlit.sidebar.download_button(
-            label=f'{Path(filename).name}',
+            label=Path(filename).name,
             data=data,
-            file_name=filename,
+            file_name=Path(filename).name,
             mime=file_mime,
         )
     except Exception as e:
@@ -392,7 +409,7 @@ def initialize_session(
     # Initialize cache directory
     if prod_mode:
         if 'cache_dir' not in session_state:
-            session_state.cache_dir = CACHE_DIR[:-1] + '/cache' + f'_{session_state.session_id}/'
+            session_state.cache_dir = CACHE_DIR[:-1] + '_prod_mode' + '/cache' + f'_{session_state.session_id}/'
     else:
         if 'cache_dir' not in session_state:
             session_state.cache_dir = CACHE_DIR
@@ -440,10 +457,6 @@ def initialize_session(
     # Launch time
     if 'launch_time' not in session_state:
         session_state.launch_time = datetime.datetime.now()
-
-    # Cache creation
-    if 'cache_created' not in streamlit.session_state:
-        streamlit.session_state.cache_created = False
 
 
 def submit_sec_edgar_details() -> None:

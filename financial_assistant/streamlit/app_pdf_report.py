@@ -1,7 +1,7 @@
 import os
 import shutil
 from base64 import b64encode
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import streamlit
 from streamlit.runtime.uploaded_file_manager import UploadedFile
@@ -111,7 +111,7 @@ def include_pdf_report() -> None:
         data_paths['history'] = streamlit.session_state.history_path
 
     # Add title name (optional)
-    title_name = streamlit.text_input('Title Name', 'Financial Report')
+    title_name = streamlit.text_input(label='Title Name', value='Financial Report')
 
     # Include summary for each section
     include_summary = streamlit.checkbox(
@@ -132,20 +132,21 @@ def include_pdf_report() -> None:
             pdf_handler = handle_pdf_generation(title_name, report_name, data_paths, include_summary)
 
             # Embed PDF to display it:
-            base64_pdf = b64encode(pdf_handler).decode('utf-8')
-            pdf_display = (
-                f'<embed src="data:application/pdf;base64,{base64_pdf}"'
-                ' width="700" height="400" type="application/pdf">'
-            )
-            streamlit.markdown(pdf_display, unsafe_allow_html=True)
-            # Add download button
-            streamlit.download_button(
-                label='Download Report',
-                data=pdf_handler,
-                file_name=streamlit.session_state.pdf_generation_directory + report_name,
-                mime='application/pdf',
-            )
-        streamlit.write('PDF report generated successfully.')
+            if pdf_handler is not None:
+                base64_pdf = b64encode(pdf_handler).decode('utf-8')
+                pdf_display = (
+                    f'<embed src="data:application/pdf;base64,{base64_pdf}"'
+                    ' width="700" height="400" type="application/pdf">'
+                )
+                streamlit.markdown(pdf_display, unsafe_allow_html=True)
+                # Add download button
+                streamlit.download_button(
+                    label='Download Report',
+                    data=pdf_handler,
+                    file_name=report_name,
+                    mime='application/pdf',
+                )
+                streamlit.write('PDF report generated successfully.')
 
     # Use PDF report for RAG
     streamlit.markdown('<h2> Use PDF Report for RAG </h2>', unsafe_allow_html=True)
@@ -189,15 +190,14 @@ def include_pdf_report() -> None:
                 for idx, file in enumerate(files):
                     with cols[idx]:
                         if streamlit.button(
-                            file,
+                            label=f':green[{file}]' if file in streamlit.session_state.selected_files else file,
                             key=f'file-{idx}',
                             type='primary',
                             on_click=handle_click_selected_file,
                             args=(file,),
-                            disabled=True if file in streamlit.session_state.selected_files else False,
                         ):
                             pass
-                streamlit.write(f"Selected files: {', '.join(streamlit.session_state.selected_files)}")
+                streamlit.write(f"Selected files: :green[{', '.join(streamlit.session_state.selected_files)}]")
 
         elif upload_your_pdf and not use_generated_pdf:
             # Add a PDF document for RAG
@@ -219,71 +219,77 @@ def include_pdf_report() -> None:
                 # Store uploaded files
                 streamlit.session_state.uploaded_files = [file.name for file in uploaded_files]
                 for file in uploaded_files:
-                    assert isinstance(file, UploadedFile), f'{file} is not instance of UploadedFile.'
+                    if not isinstance(file, UploadedFile):
+                        streamlit.error(f'{file} is not instance of UploadedFile.')
                     with open(os.path.join(streamlit.session_state.pdf_generation_directory, file.name), 'wb') as f:
                         f.write(file.getbuffer())
 
         # The user request
         user_request = streamlit.text_input(
-            'Enter the info that you want to retrieve for given companies.',
+            label=f'Ask a question about your financial report. :sparkles: :violet[{DEFAULT_PDF_RAG_QUERY}]',
             key='pdf-rag',
-            value="What conclusions can we draw about Meta's strategy?",
+            placeholder='E.g. ' + DEFAULT_PDF_RAG_QUERY,
         )
 
         # Use PDF reports for RAG
         if streamlit.button('Use report for RAG'):
-            if use_generated_pdf and not upload_your_pdf:
-                # Check file selection
-                assert len(streamlit.session_state.selected_files) > 0, 'No file has been selected.'
+            if len(user_request) == 0:
+                streamlit.error('Please enter your query.')
+            else:
+                if use_generated_pdf and not upload_your_pdf:
+                    # Check file selection
+                    if len(streamlit.session_state.selected_files) == 0:
+                        streamlit.error('No file has been selected.')
 
-                # Retrieve the list of selected files
-                selected_files = streamlit.session_state.selected_files
+                    # Retrieve the list of selected files
+                    selected_files = streamlit.session_state.selected_files
 
-                # Display the list of selected files
-                streamlit.write('Selected Files:', selected_files)
-                if len(selected_files) > 0:
-                    # Retrieve the answer
-                    answer = handle_pdf_rag(user_request, selected_files)
+                    # Display the list of selected files
+                    streamlit.write('Selected Files:', selected_files)
+                    if len(selected_files) > 0:
+                        # Retrieve the answer
+                        answer = handle_pdf_rag(user_request, selected_files)
 
-                    # Compose the query and answer string
-                    content = user_request + '\n\n' + answer
+                        # Compose the query and answer string
+                        content = user_request + '\n\n' + answer
 
-                    # Save the query and answer to the PDF RAG text file
-                    if streamlit.button(
-                        'Save Answer',
-                        on_click=save_output_callback,
-                        args=(content, streamlit.session_state.pdf_rag_path),
+                        # Save the query and answer to the PDF RAG text file
+                        if streamlit.button(
+                            'Save Answer',
+                            on_click=save_output_callback,
+                            args=(content, streamlit.session_state.pdf_rag_path),
+                        ):
+                            pass
+
+                elif upload_your_pdf and not use_generated_pdf:
+                    # Check file upload
+                    if len(streamlit.session_state.uploaded_files) == 0:
+                        streamlit.error('No file has been uploaded.')
+
+                    # Retrieve the list of uploaded files
+                    uploaded_file_names = streamlit.session_state.uploaded_files
+
+                    if (
+                        isinstance(uploaded_file_names, list)
+                        and len(uploaded_file_names) > 0
+                        and all(isinstance(item, str) for item in uploaded_file_names)
                     ):
-                        pass
+                        # Display the list of uploaded files
+                        streamlit.write('Uploaded Files:', uploaded_file_names)
 
-            elif upload_your_pdf and not use_generated_pdf:
-                # Check file upload
-                assert len(streamlit.session_state.uploaded_files), 'No file has been uploaded.'
+                        # Retrieve the answer
+                        answer = handle_pdf_rag(user_request, uploaded_file_names)
 
-                # Retrieve the list of uploaded files
-                uploaded_file_names = streamlit.session_state.uploaded_files
+                        # Compose the query and answer string
+                        content = user_request + '\n\n' + answer
 
-                if (
-                    isinstance(uploaded_file_names, list)
-                    and len(uploaded_file_names) > 0
-                    and all(isinstance(item, str) for item in uploaded_file_names)
-                ):
-                    # Display the list of uploaded files
-                    streamlit.write('Uploaded Files:', uploaded_file_names)
-
-                    # Retrieve the answer
-                    answer = handle_pdf_rag(user_request, uploaded_file_names)
-
-                    # Compose the query and answer string
-                    content = user_request + '\n\n' + answer
-
-                    # Save the query and answer to the PDF RAG text file
-                    if streamlit.button(
-                        'Save Answer',
-                        on_click=save_output_callback,
-                        args=(content, streamlit.session_state.pdf_rag_path),
-                    ):
-                        pass
+                        # Save the query and answer to the PDF RAG text file
+                        if streamlit.button(
+                            'Save Answer',
+                            on_click=save_output_callback,
+                            args=(content, streamlit.session_state.pdf_rag_path),
+                        ):
+                            pass
 
 
 def handle_pdf_generation(
@@ -291,7 +297,7 @@ def handle_pdf_generation(
     report_name: str = 'financial_report',
     data_paths: Dict[str, str] = dict(),
     include_summary: bool = False,
-) -> bytes:
+) -> Optional[bytes]:
     """
     Generate a PDF report using the provided data paths.
 
@@ -320,10 +326,14 @@ def handle_pdf_generation(
     output_file = streamlit.session_state.pdf_generation_directory + report_name
 
     # Check that at least one data source is available
-    assert any([data_paths[key] for key in data_paths]), 'Select at least one data source.'
+    if not any([data_paths[key] for key in data_paths]):
+        streamlit.error('Select at least one data source.')
+        return None
 
     # Assert that at least one data source exists as a file
-    assert any([os.path.isfile(data_paths[key]) for key in data_paths]), 'No data source available.'
+    if not any([os.path.isfile(data_paths[key]) for key in data_paths]):
+        streamlit.error('No data source available.')
+        return None
 
     for source_file in data_paths.values():
         # Create the full path for the destination file
@@ -387,7 +397,13 @@ def check_upload_your_pdf() -> None:
 # Function to handle button click
 def handle_click_selected_file(file: str) -> None:
     """Add selected file to the list of selected files."""
-    streamlit.session_state.selected_files.append(file)
+
+    if file not in streamlit.session_state.selected_files:
+        # Add file to the list of selected files
+        streamlit.session_state.selected_files.append(file)
+    else:
+        # Remove file from the list of selected files
+        streamlit.session_state.selected_files = [x for x in streamlit.session_state.selected_files if x != file]
     streamlit.session_state.selected_files = list(set(streamlit.session_state.selected_files))
 
 

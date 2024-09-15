@@ -16,6 +16,7 @@ from pandasai import SmartDataframe
 from pandasai.connectors import SqliteConnector
 from sqlalchemy import Inspector, create_engine
 
+from financial_assistant.prompts.pandasai_prompts import PLOT_INSTRUCTIONS, TITLE_INSTRUCTIONS_TEMPLATE
 from financial_assistant.prompts.sql_queries_prompt import SQL_QUERY_PROMPT_TEMPLATE
 from financial_assistant.src.llm import get_sambanova_credentials
 from financial_assistant.src.tools import (
@@ -127,6 +128,7 @@ def store_company_dataframes_to_sqlite(
             # Build a table name using the company symbol and the dataframe purpose/type
             table_name = f'{company_base_name}_{df_name}'
             try:
+                # Convert the data to dataframe format
                 df = convert_data_to_frame(data, df_name)
             except:
                 logger.warning(f'Could not convert {df_name} to `pandas.DataFrame`.')
@@ -216,9 +218,13 @@ def query_stock_database(
 
     if method == 'text-to-SQL':
         return query_stock_database_sql(user_query, symbol_list)
+
     elif method == 'PandasAI-SqliteConnector':
-        instructions_plot = '\nPlease display dates in any figures in ascending order, using only the year and month.'
-        return query_stock_database_pandasai(user_query + instructions_plot, symbol_list)
+        # Add the plot instructions to the user query
+        final_query = user_query + '\n' + PLOT_INSTRUCTIONS + '\n' + TITLE_INSTRUCTIONS_TEMPLATE
+
+        return query_stock_database_pandasai(final_query, symbol_list)
+
     else:
         raise ValueError(f'`method` should be either `text-to-SQL` or `PandasAI-SqliteConnector`. Got {method}')
 
@@ -361,8 +367,10 @@ def query_stock_database_pandasai(user_query: str, symbol_list: List[str]) -> An
 
         response[symbol] = list()
         for table in selected_tables:
+            # Insert table name in the prompt
+            final_query = user_query.format(table_name=table)
             # Append the response for the given company symbol
-            response[symbol].append(interrogate_table(streamlit.session_state.db_path, table, user_query))
+            response[symbol].append(interrogate_table(streamlit.session_state.db_path, table, final_query))
 
     return response
 
@@ -445,19 +453,25 @@ def select_database_tables(user_query: str, symbol_list: List[str]) -> List[str]
     )
 
     # Invoke the chain with the user query and the table summaries
-    max_tokens_to_generate_list = list({streamlit.session_state.llm.llm_info['max_tokens_to_generate'], 1024, 256, 128})
+    max_tokens_to_generate_list = list(
+        {streamlit.session_state.llm.llm_info['max_tokens_to_generate'], 1024, 512, 256, 128}
+    )
     # Bound the number of tokens to generate based on the config value
     max_tokens_to_generate_list = [
         elem
         for elem in max_tokens_to_generate_list
-        if elem < streamlit.session_state.llm.llm_info['max_tokens_to_generate']
+        if elem <= streamlit.session_state.llm.llm_info['max_tokens_to_generate']
     ]
+
+    # Sort the list in descending order
+    max_tokens_to_generate_list = sorted(max_tokens_to_generate_list, reverse=True)
 
     # Get the Sambanova API key
     sambanova_api_key = get_sambanova_credentials()
 
     # Call the LLM for each number of tokens to generate
     # Return the first valid response
+    table_names = list()
     for item in max_tokens_to_generate_list:
         try:
             # Instantiate the LLM
@@ -479,11 +493,18 @@ def select_database_tables(user_query: str, symbol_list: List[str]) -> List[str]
             assert isinstance(response.table_names, list) and all(
                 [isinstance(elem, str) for elem in response.table_names]
             ), 'Invalid response'
-            return response.table_names
+            table_names = response.table_names
+            break
         except:
             pass
 
-    return list()
+    try:
+        assert len(table_names) > 0
+    except AssertionError:
+        streamlit.error('No relevant SQL tables found.')
+        streamlit.stop()
+
+    return table_names
 
 
 def get_table_summaries_from_symbols(symbol_list: List[str]) -> str:
