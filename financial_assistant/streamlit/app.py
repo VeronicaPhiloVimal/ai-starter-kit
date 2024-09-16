@@ -37,7 +37,7 @@ from financial_assistant.streamlit.app_user_profile import generate_user_profile
 from financial_assistant.streamlit.app_goal_planning import generate_goal_based_plan
 from financial_assistant.streamlit.app_market_insights import get_market_insights
 from financial_assistant.streamlit.app_investment_recommendations import get_investment_recommendations
-from financial_assistant.streamlit.app_ai_report import generate_ai_report
+
 
 
 # Initialize Weave with your project name
@@ -76,10 +76,7 @@ def main() -> None:
     # Add sidebar
     with streamlit.sidebar:
         if not are_credentials_set():
-<<<<<<< HEAD
-=======
             # Get the SambaNova API Key
->>>>>>> origin/main
             streamlit.markdown('Get your SambaNova API key [here](https://cloud.sambanova.ai/apis)')
             url, api_key = env_input_fields()
             if streamlit.button('Save Credentials', key='save_credentials_sidebar'):
@@ -97,8 +94,6 @@ def main() -> None:
                     streamlit.success(r':orange[You have been logged out.]')
                     time.sleep(2)
                     streamlit.rerun()
-<<<<<<< HEAD
-=======
 
         # Create the cache and its main subdirectories
         if are_credentials_set() and not os.path.exists(streamlit.session_state.cache_dir):
@@ -110,32 +105,6 @@ def main() -> None:
                     streamlit.session_state.pdf_generation_directory,
                 ]
                 create_temp_dir_with_subdirs(streamlit.session_state.cache_dir, subdirectories)
->>>>>>> origin/main
-
-        # Navigation menu
-        menu = streamlit.radio(
-            'Go to',
-            [
-                'Home',
-                'User Financial Profile',
-                'Goal-Based Financial Plan',
-                'Market & Investment Insights',
-                'Investment Recommendations',
-                'Generative AI Report',
-                'Stock Data Analysis',
-                'Stock Database',
-            ],
-        )
-
-<<<<<<< HEAD
-    # Main app
-    if menu == 'Home':
-        streamlit.title('Smart Financial Plan Assistant')
-
-        streamlit.write("""Welcome to the Smart Financial Plan Assistant, where you can explore a wide range
-            of financial insights, market data, and personalized investment plans using AI-powered models.
-        """)
-=======
             else:
                 # In development mode
                 subdirectories = [
@@ -157,7 +126,7 @@ def main() -> None:
                     streamlit.button('Exit App', help='This will delete the cache!')
                     or time_delta.seconds / 30 > EXIT_TIME_DELTA
                 ):
-                    # Crear the chat history
+                    # Clear the chat history
                     streamlit.session_state.chat_history = list()
                     # Delete the cache
                     clear_cache(delete=True)
@@ -170,7 +139,29 @@ def main() -> None:
                     time.sleep(2)
                     streamlit.rerun()
                     return
->>>>>>> origin/main
+
+        # Navigation menu
+        menu = streamlit.radio(
+            'Go to',
+            [
+                'Home',
+                'User Financial Profile',
+                'Goal-Based Financial Plan',
+                'Market & Investment Insights',
+                'Investment Recommendations',
+                
+                'Stock Data Analysis',
+                'Stock Database',
+            ],
+        )
+
+    # Main app
+    if menu == 'Home':
+        streamlit.title('Smart Financial Plan Assistant')
+
+        streamlit.write("""Welcome to the Smart Financial Plan Assistant, where you can explore a wide range
+            of financial insights, market data, and personalized investment plans using AI-powered models.
+        """)
 
     elif menu == 'User Financial Profile':
         generate_user_profile()
@@ -181,110 +172,13 @@ def main() -> None:
     elif menu == 'Market & Investment Insights':
         get_market_insights()
 
-<<<<<<< HEAD
     elif menu == 'Investment Recommendations':
         get_investment_recommendations()
 
-    elif menu == 'Generative AI Report':
-        generate_ai_report()
+
 
     elif menu == 'Stock Data Analysis':
         get_stock_data_analysis()
-=======
-            # Set the default path
-            cache_dir = streamlit.session_state.cache_dir
-            # Use Streamlit's session state to persist the current path
-            if 'current_path' not in streamlit.session_state:
-                streamlit.session_state.current_path = cache_dir
-
-            if os.path.exists(cache_dir):
-                # Input to allow user to go back to a parent directory, up to the cache, but not beyond the cache
-                if (
-                    streamlit.sidebar.button('⬅️ Back', key=f'back')
-                    and cache_dir in streamlit.session_state.current_path
-                ):
-                    streamlit.session_state.current_path = os.path.dirname(streamlit.session_state.current_path)
-
-                    # Display the current directory contents
-                    display_directory_contents(streamlit.session_state.current_path, cache_dir)
-                else:
-                    # Display the current directory contents
-                    display_directory_contents(streamlit.session_state.current_path, cache_dir)
-
-    # Title of the main page
-    columns = streamlit.columns([0.15, 0.85], vertical_alignment='top')
-    columns[0].image(SAMBANOVA_LOGO, width=100)
-    columns[1].title('SambaNova Financial Assistant')
-
-    if are_credentials_set():
-        # Home page
-        if menu == 'Home':
-            streamlit.title('Financial Insights with LLMs')
-
-            streamlit.write(
-                """
-                    Welcome to SambaNova Financial Assistant.
-                    This app demonstrates the capabilities of large language models (LLMs)
-                    in extracting and analyzing financial data using function calling, web scraping,
-                    and retrieval-augmented generation (RAG).
-                    
-                    Use the navigation menu to explore various features including:
-                    
-                    - **Stock Data Analysis**: Query and analyze stocks based on Yahoo Finance data.
-                    - **Stock Database**: Create and query an SQL database based on Yahoo Finance data.
-                    - **Financial News Scraping**: Scrape financial news articles from Yahoo Finance News.
-                    - **Financial Filings Analysis**: Query and analyze financial filings based on SEC EDGAR data.
-                    - **Generate PDF Report**: Generate a PDF report based on the saved answered queries
-                        or on the whole chat history.
-                    - **Print Chat History**: Print the whole chat history.
-                """
-            )
-
-        # Stock Data Analysis page
-        elif menu == 'Stock Data Analysis':
-            get_stock_data_analysis()
-
-        # Stock Database page
-        elif menu == 'Stock Database':
-            get_stock_database()
-
-        # Financial News Scraping page
-        elif menu == 'Financial News Scraping':
-            get_yfinance_news()
-
-        # Financial Filings Analysis page
-        elif menu == 'Financial Filings Analysis':
-            # Populate SEC-EDGAR credentials
-            submit_sec_edgar_details()
-            if (
-                streamlit.session_state.SEC_API_ORGANIZATION is not None
-                and streamlit.session_state.SEC_API_EMAIL is not None
-            ):
-                include_financial_filings()
-
-        # Generate PDF Report page
-        elif menu == 'Generate PDF Report':
-            include_pdf_report()
-
-        # Print Chat History page
-        elif menu == 'Print Chat History':
-            # Custom button to clear chat history
-            with stylable_container(
-                key='blue-button',
-                css_styles=get_blue_button_style(),
-            ):
-                if streamlit.button('Clear Chat History'):
-                    streamlit.session_state.chat_history = list()
-                    # Log message
-                    streamlit.success(f'Cleared chat history.')
-
-            # Add button to stream chat history
-            if streamlit.button('Print Chat History'):
-                if len(streamlit.session_state.chat_history) == 0:
-                    streamlit.warning('No chat history to show.')
-                else:
-                    stream_chat_history()
->>>>>>> origin/main
 
     elif menu == 'Stock Database':
         get_stock_database()
